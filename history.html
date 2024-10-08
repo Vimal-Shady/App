@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scan History</title>
+    <link rel="stylesheet" href="App.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="logo">
+            <h1>Scan History</h1>
+        </div>
+        <nav class="navigation-bar">
+            <a href="detection.html">Go Back</a>  <!-- Link to Main Page -->
+        </nav>
+    </header>
+
+    <main class="main-content">
+        <section class="history-section">
+            <h2>Your Plant Disease Scan History</h2>
+            <div id="results" class="results-container"></div>  <!-- History Results Container -->
+        </section>
+    </main>
+
+    <footer class="main-footer">
+        <div class="footer-content">
+            <p>&copy; 2024 Plant Disease Detection. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        function loadScanResults() {
+            let scans = JSON.parse(localStorage.getItem("scans")) || [];
+            let resultContainer = document.getElementById("results");
+            resultContainer.innerHTML = '';
+
+            scans.forEach(scan => {
+                let scanItem = document.createElement("div");
+                scanItem.innerHTML = `<strong>Date:</strong> ${scan.date}<br>
+                                      <strong>Disease:</strong> ${scan.disease}<br>
+                                      <img src="${scan.image}" alt="Scan Image" width="100"><br><hr>`;
+                resultContainer.appendChild(scanItem);
+            });
+        }
+
+        // Load scan results when the page loads
+        document.addEventListener("DOMContentLoaded", loadScanResults);
+    </script>
+</body>
+</html>

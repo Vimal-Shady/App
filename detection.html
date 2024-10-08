@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plant Disease Detection</title>
+    <link rel="stylesheet" href="App.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="logo">
+            <h1>Plant Disease Classification</h1>
+        </div>
+        <nav class="navigation-bar">
+            <a href="history.html">View Scan History</a>
+        </nav>
+    </header>
+
+    <main class="main-content">
+        <section class="hero-section">
+            <h2>Detect Plant Diseases in Real-Time</h2>
+            <div class="button-group">
+                <button type="button" class="btn" onclick="startWebcam()">Start Webcam</button>
+                <input type="file" id="image-upload" accept="image/*" onchange="uploadImage(event)" />
+            </div>
+        </section>
+
+        <div class="container">
+            <div id="webcam-container" class="page"></div>
+            <div id="label-container" class="page"></div>
+            <div id="solution-container" class="page"></div>
+        </div>
+    </main>
+
+    <footer class="main-footer">
+        <div class="footer-content">
+            <p>&copy; 2024 Plant Disease Detection. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    <script>
+        const URL = "http://localhost:8000/my_model/";
+
+        let model, webcam, labelContainer, solutionContainer, maxPredictions;
+        let isPredicting = false;
+        let highestPrediction = { className: "", probability: 0 };
+
+        async function startWebcam() {
+            if (webcam) {
+                await webcam.stop();
+                document.getElementById("webcam-container").innerHTML = '';
+                document.getElementById("label-container").innerHTML = '';
+                document.getElementById("solution-container").innerHTML = '';
+            }
+
+            initWebcam();
+        }
+
+        async function initWebcam() {
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
+
+            try {
+                model = await tmImage.load(modelURL, metadataURL);
+                maxPredictions = model.getTotalClasses();
+
+                const flip = true;
+                webcam = new tmImage.Webcam(200, 200, flip);
+                await webcam.setup();
+                await webcam.play();
+                window.requestAnimationFrame(loop);
+
+                document.getElementById("webcam-container").appendChild(webcam.canvas);
+                labelContainer = document.getElementById("label-container");
+                solutionContainer = document.getElementById("solution-container");
+
+                labelContainer.innerHTML = '';  // Reset label container
+                labelContainer.appendChild(document.createElement("div"));
+
+                isPredicting = true;
+                highestPrediction = { className: "", probability: 0 };
+                setTimeout(() => stopPredicting(), 5000);
+            } catch (error) {
+                console.error("Error during initialization:", error);
+            }
+        }
+
+        async function uploadImage(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // Ensure the model is loaded
+            if (!model) {
+                await loadModel();
+            }
+
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = () => {
+                    const canvas = document.createElement("canvas");
+                    const context = canvas.getContext("2d");
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    context.drawImage(img, 0, 0, img.width, img.height);
+
+                    document.getElementById("webcam-container").innerHTML = '';
+                    document.getElementById("webcam-container").appendChild(canvas);
+
+                    predictImageFromCanvas(canvas);
+                };
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function loadModel() {
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
+
+            try {
+                model = await tmImage.load(modelURL, metadataURL);
+                maxPredictions = model.getTotalClasses();
+            } catch (error) {
+                console.error("Error loading model:", error);
+            }
+        }
+
+        async function predictImageFromCanvas(canvas) {
+            const predictions = await model.predict(canvas);
+            highestPrediction = predictions.reduce((prev, curr) => (curr.probability > prev.probability ? curr : prev), predictions[0]);
+
+            labelContainer = document.getElementById("label-container");
+            solutionContainer = document.getElementById("solution-container");
+
+            // Ensure labelContainer has a child before updating innerHTML
+            if (labelContainer.childNodes.length === 0) {
+                labelContainer.appendChild(document.createElement("div"));
+            }
+
+            const predictedDisease = highestPrediction.className + ": " + highestPrediction.probability.toFixed(2);
+            labelContainer.childNodes[0].innerHTML = predictedDisease;
+
+            const solution = getSolution(highestPrediction.className);
+            solutionContainer.innerHTML = `<h3>Suggested Solution:</h3><p>${solution}</p>`;
+
+            const image = canvas.toDataURL("image/png");
+            storeScanResult(image, highestPrediction.className);
+        }
+
+        function stopPredicting() {
+            isPredicting = false;
+        }
+
+        async function loop() {
+            if (isPredicting) {
+                webcam.update();
+                await predict();
+                window.requestAnimationFrame(loop);
+            }
+        }
+
+        async function predict() {
+            const predictions = await model.predict(webcam.canvas);
+            predictions.forEach(prediction => {
+                if (prediction.probability > highestPrediction.probability) {
+                    highestPrediction = prediction;
+                }
+            });
+        }
+
+        function storeScanResult(image, disease) {
+            const scan = {
+                image: image,
+                disease: disease,
+                date: new Date().toLocaleString()
+            };
+            let scans = JSON.parse(localStorage.getItem("scans")) || [];
+            scans.push(scan);
+            localStorage.setItem("scans", JSON.stringify(scans));
+        }
+
+        function getSolution(disease) {
+            const solutions = {
+                "Healthy": "No action needed. Continue regular care and monitoring.",
+                "Deficiency": "Apply a balanced fertilizer and ensure adequate watering. Test the soil pH and adjust as necessary.",
+                "Wilt-Virus": "Remove and destroy infected plants to prevent the spread. Practice crop rotation and use resistant plant varieties."
+            };
+            return solutions[disease] || "No solution available.";
+        }
+    </script>
+</body>
+</html>
